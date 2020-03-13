@@ -14,4 +14,4 @@ install (TARGETS ${LIBRARY_NAME} DESTINATION lib)
 install (FILES ${INCLUDE_FILES} DESTINATION include)
 
 #copy the library to the raspberry pi /lib directory
-install(CODE "execute_process(COMMAND scp -r ${Server_SOURCE_DIR}/build/usr/lib ${RASP_IP}:/)")
+install(CODE "execute_process(COMMAND scp -r ${PROJECT_SOURCE_DIR}/build/usr/lib ${RASP_IP}:/)")
