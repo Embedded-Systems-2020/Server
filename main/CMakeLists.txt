@@ -1,10 +1,11 @@
 #include directories to building path
 include_directories(${PROJECT_SOURCE_DIR}/libgpio/include)
+include_directories(include)
 
 
 
 # add the executable
-add_executable (Server server_test.c)
+add_executable (Server server.c)
 
 #link against required libraries
 target_link_libraries(Server gpio ulfius jansson)

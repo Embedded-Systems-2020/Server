@@ -1,23 +1,22 @@
 #include <stdio.h>
 #include <gpio.h>
 #include <ulfius.h>
-#include <jansson.h>
+#include <consts.h>
 
 #define PORT 8080
-#define PIN_TEST 24
+int _EXIT = 0;
 
-int callback_test_led(const struct _u_request *request, struct _u_response *response, void *user_data){
+int callback_test_light(const struct _u_request *request, struct _u_response *response, void *user_data){
 
     char *state = u_map_get(request->map_url, "state");
     int stateValue = atoi(state);
 
-    if(digitalWrite(PIN_TEST, stateValue) == 0)
-        ulfius_set_json_body_response(response, 200, json_pack("{ss}", "message", "Led state changed!"));
+    if(digitalWrite(LIGHTS[TEST], stateValue) == 0)
+        ulfius_set_json_body_response(response, 200, json_pack("{ss}", OK, LIGHT_OK));
     else
-        ulfius_set_string_body_response(response, 500, "Error changing led state");
+        ulfius_set_json_body_response(response, 500, json_pack("{ss}", ERROR, LIGHT_ERR));
 
     return U_CALLBACK_CONTINUE;
-
 }
 
 /**
@@ -36,9 +35,11 @@ int main(void) {
 //     FILE *cmdFP;
 //     char *line = NULL;
 //     int len = 32;
+    char cmd[10];
+    int len = 0;
 
     //Initialize pin
-    if(pinMode(PIN_TEST, OUTPUT) < 0) {
+    if(pinMode(LIGHTS[TEST], OUTPUT) < 0) {
         fprintf(stderr, "Unable to set pin Mode\n");
         return(1);
     }
@@ -54,7 +55,7 @@ int main(void) {
     // Endpoint list declaration
     ulfius_add_endpoint_by_val(&instance, "GET", "/helloworld", NULL, 0, &callback_hello_world, NULL);
 
-    ulfius_add_endpoint_by_val(&instance, "GET", NULL, "/led/:state", 0, &callback_test_led, NULL);
+    ulfius_add_endpoint_by_val(&instance, "GET", NULL, "/led/:state", 0, &callback_test_light, NULL);
 
     // Start the framework
     if (ulfius_start_framework(&instance) == U_OK) {
@@ -86,8 +87,15 @@ int main(void) {
         //     }
         // }
 
-        // Wait for the user to press <enter> on the console to quit the application
-        getchar();
+        //Exit from terminal
+        while(!_EXIT){
+            fgets(cmd, 10, stdin);
+            len = strlen(cmd)-1;
+            if( cmd[len] == '\n')
+            cmd[len] = '\0';
+            if(strcmp(cmd, "exit") == 0)
+                _EXIT = 1;
+        }
     }
 
     else {
@@ -96,7 +104,7 @@ int main(void) {
 
     printf("End framework\n");
 
-    releasePin(PIN_TEST);
+    releasePin(LIGHTS[TEST]);
 
     ulfius_stop_framework(&instance);
     ulfius_clean_instance(&instance);
