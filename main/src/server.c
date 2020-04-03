@@ -57,6 +57,8 @@ int callback_doors(const struct _u_request *pRequest, struct _u_response *pRespo
         value = digitalRead(DOORS[DINING]);
     else if(strcmp(location, "bath") == 0)
         value = digitalRead(DOORS[BATHROOM]);
+    else if(strcmp(location, "main") == 0)
+        value = digitalRead(DOORS[MAIN]);
     else{
         ulfius_set_json_body_response(pResponse, 400, json_pack("{ss}", ERROR, ROOM_ERR));
         return U_CALLBACK_COMPLETE;
@@ -109,6 +111,31 @@ int callback_lights(const struct _u_request *pRequest, struct _u_response *pResp
 }
 
 /**
+ * Returns the state of all doors
+ *
+ * @param  pRequest  Http request received
+ * @param  pResponse Response object
+ * @param  pUserData User Data object
+ * @return           json_t object
+ */
+int callback_all_doors(const struct _u_request *pRequest, struct _u_response *pResponse, void *pUserData){
+
+    json_t *root = json_object();
+
+    json_object_set_new(root, "kitchen", json_integer(digitalRead(DOORS[KITCHEN])));
+    json_object_set_new(root, "room1", json_integer(digitalRead(DOORS[BEDROOM_1])));
+    json_object_set_new(root, "room2", json_integer(digitalRead(DOORS[BEDROOM_2])));
+    json_object_set_new(root, "living", json_integer(digitalRead(DOORS[LIVING])));
+    json_object_set_new(root, "dining", json_integer(digitalRead(DOORS[DINING])));
+    json_object_set_new(root, "bathroom", json_integer(digitalRead(DOORS[BATHROOM])));
+    json_object_set_new(root, "main", json_integer(digitalRead(DOORS[MAIN])));
+
+    ulfius_set_json_body_response(pResponse, 200, root);
+    return U_CALLBACK_COMPLETE;
+
+}
+
+/**
  * Callback function for the web application on /helloworld url call
  */
 int callback_hello_world (const struct _u_request * request, struct _u_response * response, void * user_data) {
@@ -122,6 +149,7 @@ int callback_hello_world (const struct _u_request * request, struct _u_response 
 void addEndpoints(struct _u_instance *pServerInstance){
 
     ulfius_add_endpoint_by_val(pServerInstance, "GET", "/helloworld", NULL, 0, &callback_hello_world, NULL);
+    ulfius_add_endpoint_by_val(pServerInstance, "GET", "/home/doors", NULL, 0, &callback_all_doors, NULL);
     ulfius_add_endpoint_by_val(pServerInstance, "GET", NULL, "/users/:user", 0, &callback_login, NULL);
     ulfius_add_endpoint_by_val(pServerInstance, "GET", NULL, "/home/:location/door", 0, &callback_doors, NULL);
     ulfius_add_endpoint_by_val(pServerInstance, "GET", NULL, "/home/:location/light/:state", 0, &callback_lights, NULL);
