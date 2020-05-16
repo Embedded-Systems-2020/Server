@@ -19,6 +19,7 @@ static const char * LOGIN_ERR = "Problem with login, provide user and password";
 static const char * USER_ERR = "User doesn't exist";
 static const char * PASS_ERR = "Incorrect password";
 static const char * ROOM_ERR = "This room doesn't exist ¯\_(ツ)_/¯";
+static const char * PIC_ERR = "Problem reading picture";
 
 
 
