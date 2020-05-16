@@ -6,6 +6,9 @@
 #include <consts.h>
 #include <rsa.h>
 #include <search.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define PORT 8080
 static const char *USER = "admin";
@@ -164,7 +167,7 @@ void exportPins(){
     int lenght = sizeof(LIGHTS) / sizeof(LIGHTS[0]);
     for(int i=0; i< lenght; i++){
         if(pinMode(LIGHTS[i], OUTPUT) < 0) {
-            fprintf(stderr, "Unable to set pin as ouput: %d", LIGHTS[i]);
+            fprintf(stderr, "Unable to set pin as ouput: %d\n", LIGHTS[i]);
         }
     }
 
@@ -172,7 +175,7 @@ void exportPins(){
     lenght = sizeof(DOORS) / sizeof(DOORS[0]);
     for(int i=0; i< lenght; i++){
         if(pinMode(DOORS[i], INPUT) < 0) {
-            fprintf(stderr, "Unable to set pin as input: %d", DOORS[i]);
+            fprintf(stderr, "Unable to set pin as input: %d\n", DOORS[i]);
         }
     }
 }
@@ -185,7 +188,7 @@ void unexportPins(){
     int lenght = sizeof(LIGHTS) / sizeof(LIGHTS[0]);
     for(int i=0; i< lenght; i++){
         if(releasePin(LIGHTS[i]) < 0) {
-            fprintf(stderr, "Unable to unexport pin: %d", LIGHTS[i]);
+            fprintf(stderr, "Unable to unexport pin: %d\n", LIGHTS[i]);
         }
     }
 
@@ -193,15 +196,68 @@ void unexportPins(){
     lenght = sizeof(DOORS) / sizeof(DOORS[0]);
     for(int i=0; i< lenght; i++){
         if(releasePin(DOORS[i]) < 0) {
-            fprintf(stderr, "Unable to unexport pin: %d", DOORS[i]);
+            fprintf(stderr, "Unable to unexport pin: %d\n", DOORS[i]);
         }
     }
+}
+
+/**
+ * Resets the contents of the file used for input commands
+ * @param pFilePtr File descriptor
+ */
+void resetInputFile(FILE *pFilePtr){
+    pFilePtr = fopen("srv_input.txt", "w+");
+    fclose(pFilePtr);
+}
+
+void shutdownServer(FILE *pLogPtr){
+    unexportPins();
+    ulfius_stop_framework(&_serverInstance);
+    ulfius_clean_instance(&_serverInstance);
+    fprintf(pLogPtr, "Shutting down...\n");
+    fclose(pLogPtr);
 }
 
 /**
  * main function
  */
 int main(void) {
+    //---------------------------------------------------------------------------------
+        FILE *fp= NULL;
+        pid_t process_id = 0;
+        pid_t sid = 0;
+        // Create child process
+        process_id = fork();
+        // Indication of fork() failure
+        if (process_id < 0) {
+            printf("fork failed!\n");
+            // Return failure in exit status
+            exit(1);
+        }
+        // PARENT PROCESS. Need to kill it.
+        if (process_id > 0) {
+            printf("process_id of child process %d \n", process_id);
+            // return success in exit status
+            exit(0);
+        }
+        //unmask the file mode
+        umask(0);
+        //set new session
+        sid = setsid();
+        if(sid < 0) {
+            // Return failure
+            exit(1);
+        }
+        // Change the current working directory to root.
+        chdir("/");
+        // Close stdin. stdout and stderr
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+        // Open a log file in write mode.
+        fp = fopen ("Log_server.txt", "w+");
+
+    //---------------------------------------------------------------------------------
 
     char cmd[10];
     int len = 0;
@@ -210,7 +266,7 @@ int main(void) {
 
     // Initialize instance with the port number
     if (ulfius_init_instance(&_serverInstance, PORT, NULL, NULL) != U_OK) {
-        fprintf(stderr, "Error initializing the server instance\n");
+        fprintf(fp, "Error initializing the server instance\n");
         return(1);
     }
 
@@ -219,30 +275,71 @@ int main(void) {
     // Start the framework
     int start = ulfius_start_framework(&_serverInstance) ;
     if (start == U_OK) {
-        printf("Start framework on port %d\n", _serverInstance.port);
+        //printf("Start framework on port %d\n", _serverInstance.port);
+
+        FILE *inputPtr;
+        FILE *tmpPtr;
+        char out[100];
+        char in[100];
+
+        fprintf(fp, "Framework started on port %d\n", _serverInstance.port);
+        fflush(fp);
+
+        resetInputFile(tmpPtr);
 
         //Exit from terminal
         while(!_EXIT){
-            fgets(cmd, 10, stdin);
-            len = strlen(cmd)-1;
-            if( cmd[len] == '\n')
-            cmd[len] = '\0';
-            if(strcmp(cmd, "exit") == 0)
+
+            sleep(1);
+            if((inputPtr = fopen("srv_input.txt", "r")) == NULL){
+                //printf("Error opening input file\n");
+                fprintf(fp, "Error opening input file... Shutting down...\n");
+                fflush(fp);
                 _EXIT = 1;
+
+            }
+            else{
+                fscanf(inputPtr, "%[^\n]", in);
+                if(strcmp(in, "exit") == 0){
+                    fclose(inputPtr);
+                    resetInputFile(tmpPtr);
+                    shutdownServer(fp);
+                    _EXIT = 1;
+                }
+
+                fclose(inputPtr);
+                resetInputFile(tmpPtr);
+
+            }
         }
+
+
+
+        //     fgets(cmd, 10, stdin);
+        //     len = strlen(cmd)-1;
+        //     if( cmd[len] == '\n')
+        //     cmd[len] = '\0';
+        //     if(strcmp(cmd, "exit") == 0)
+        //         _EXIT = 1;
+        // }
     }
 
     else {
         fprintf(stderr, "Error starting framework\n");
         printf("Error is: %d\n", start);
+        fprintf(fp, "Error starting framework\n");
+        fflush(fp);
+
+        shutdownServer(fp);
     }
 
-    printf("End framework\n");
 
-    //Release pins and stop server framework
-    unexportPins();
-    ulfius_stop_framework(&_serverInstance);
-    ulfius_clean_instance(&_serverInstance);
+    // //Release pins and stop server framework
+    // unexportPins();
+    // ulfius_stop_framework(&_serverInstance);
+    // ulfius_clean_instance(&_serverInstance);
+
+    fclose(fp);
 
     return 0;
 }

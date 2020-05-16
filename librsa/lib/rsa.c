@@ -44,10 +44,12 @@ int private_encrypt(unsigned char * data,int data_len,unsigned char * key, unsig
 }
 
 int public_decrypt(unsigned char * enc_data,int data_len,unsigned char * key, unsigned char *decrypted) {
+
     RSA * rsa = createRSA(key,1);
     int  result = RSA_public_decrypt(data_len,enc_data,decrypted,rsa,padding);
-    return result;
+    return result;    
 }
+
 
 // int main(){
 //
