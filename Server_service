@@ -1,6 +1,6 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          HouseControl_service
+# Provides:          Server_service
 # Required-Start:    $local_fs $network $named $time $syslog
 # Required-Stop:     $local_fs $network $named $time $syslog
 # Default-Start:     2 3 4 5
@@ -8,11 +8,11 @@
 # Description:       House Control server
 ### END INIT INFO
 
-SCRIPT=./bin/HouseControl
+SCRIPT=./bin/Server
 RUNAS=root
 
-PIDFILE=/var/run/HouseControl_service.pid
-LOGFILE=/var/log/HouseControl_service.log
+PIDFILE=/var/run/Server_service.pid
+LOGFILE=/var/log/Server_service.log
 
 start() {
   if [ -f /var/run/$PIDNAME ] && kill -0 $(cat /var/run/$PIDNAME); then
@@ -43,7 +43,7 @@ uninstall() {
     stop
     rm -f "$PIDFILE"
     echo "Notice: log file is not be removed: '$LOGFILE'" >&2
-    update-rc.d -f HouseControl_service remove
+    update-rc.d -f Server_service remove
     rm -fv "$0"
   fi
 }
