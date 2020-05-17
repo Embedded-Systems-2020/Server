@@ -12,10 +12,13 @@
 #include <openssl/evp.h>
 
 #define PORT 8080
-static const char *USER = "admin";
-static const char *PASS = "embedded2020";
+//unsigned char * _publicKeyBuffer;
+unsigned char * _privateKeyBuffer;
 struct _u_instance _serverInstance;
 int _EXIT = 0;
+FILE *_logFD= NULL;
+//unsigned char  encrypted[4098]={};
+//int encrypted_length;
 
 struct ImageData {
     int size;
@@ -61,32 +64,36 @@ struct ImageData readImage(char *pPath){
     data.buffer = buffer;
     data.status = 0; //Success
 
-    //int i=0;
-    // while (i < fileLen){
-    //     fprintf(pLogPtr, "%02X ",(unsigned char)buffer[i]);
-    //     fflush(pLogPtr);
-    //     i++;
-    //     if( ! (i % 16) ){
-    //         fprintf(pLogPtr, "\n");
-    //         fflush(pLogPtr);
-    //     }
-    // }
-
     return data;
 }
 
 /**
- * Encodes a string of bytes in base64
+ * Encodes binary data in base64 string
  *
- * @param  input  Buffer with the readed image
+ * @param  input  Buffer with binary data
  * @param  length Size of the buffer
- * @return        String encoded in base64
+ * @return        Base64 string
  */
 char *base64(const unsigned char *input, int length) {
   const auto pl = 4*((length+2)/3);
   auto output = (char *)(calloc(pl+1, 1)); //+1 for the terminating null that EVP_EncodeBlock adds on
   const auto ol = EVP_EncodeBlock((unsigned char *)(output), input, length);
   //if (pl != ol) { std::cerr << "Whoops, encode predicted " << pl << " but we got " << ol << "\n"; }
+  return output;
+}
+
+/**
+ * Decodes string in base64 to binary data
+ *
+ * @param  input  String in base64
+ * @param  length Length of the string
+ * @return        Binary data
+ */
+unsigned char *decodeBase64(const char *input, int length) {
+  const auto pl = 3*length/4;
+  auto output = (unsigned char *)(calloc(pl+1, 1));
+  const auto ol = EVP_DecodeBlock(output, (const unsigned char *)(input), length);
+  //if (pl != ol) { std::cerr << "Whoops, decode predicted " << pl << " but we got " << ol << "\n"; }
   return output;
 }
 
@@ -105,6 +112,10 @@ int callback_login(const struct _u_request *pRequest, struct _u_response *pRespo
     char *user = u_map_get(pRequest->map_url, "user");
     char *pass = u_map_get(pRequest->map_header, "pass");
 
+    fprintf(_logFD, "---> LOGIN REQUEST: user -> %s\n", user);
+    fflush(_logFD);
+
+    unsigned char decrypted[4098]={};
     //Checks if both user and pass have been provided
     if(user == NULL || pass == NULL) {
         ulfius_set_json_body_response(pResponse, 400, json_pack("{ss}", ERROR, LOGIN_ERR));
@@ -112,14 +123,25 @@ int callback_login(const struct _u_request *pRequest, struct _u_response *pRespo
     }
 
     if(strcmp(user, USER) == 0){
-        if(strcmp(pass, PASS) == 0)
+        unsigned char * base64Decoded = decodeBase64(pass, strlen(pass));
+        private_decrypt(base64Decoded, ENCRYPTION_LENGTH, _privateKeyBuffer, decrypted);
+        fprintf(_logFD, "Decrypted: %s\n", decrypted);
+        fflush(_logFD);
+        if(strcmp(decrypted, PASS) == 0){
             ulfius_set_json_body_response(pResponse, 200, json_pack("{ss}", OK, LOGIN_OK));
-        else
+            fprintf(_logFD, "---> SUCCESSFUL LOGIN: %s\n", LOGIN_OK);
+        }
+        else{
             ulfius_set_json_body_response(pResponse, 401, json_pack("{ss}", ERROR, PASS_ERR));
+            fprintf(_logFD, "---> LOGIN ERROR: %s\n", PASS_ERR);
+        }
     }
-    else
+    else{
         ulfius_set_json_body_response(pResponse, 404, json_pack("{ss}", ERROR, USER_ERR));
+        fprintf(_logFD, "---> LOGIN ERROR: %s\n", USER_ERR);
+    }
 
+    fflush(_logFD);
     return U_CALLBACK_COMPLETE;
 }
 
@@ -186,6 +208,9 @@ int callback_lights(const struct _u_request *pRequest, struct _u_response *pResp
     char *state = u_map_get(pRequest->map_url, "state");
     int stateValue = atoi(state);
 
+    fprintf(_logFD, "---> LIGHT REQUEST: room -> %s, state -> %d\n", location, stateValue);
+    fflush(_logFD);
+
     if(strcmp(location, "kitchen") == 0)
         result = digitalWrite(LIGHTS[KITCHEN], stateValue);
     else if(strcmp(location, "room1") == 0)
@@ -198,18 +223,24 @@ int callback_lights(const struct _u_request *pRequest, struct _u_response *pResp
         result = digitalWrite(LIGHTS[DINING], stateValue);
     else if(strcmp(location, "bath") == 0)
         result = digitalWrite(LIGHTS[BATHROOM], stateValue);
+    else if(strcmp(location, "main") == 0)
+        result = digitalWrite(LIGHTS[MAIN], stateValue);
     else{
         ulfius_set_json_body_response(pResponse, 400, json_pack("{ss}", ERROR, ROOM_ERR));
+        fprintf(_logFD, "---> LIGHT ERROR: %s\n", ROOM_ERR);
         return U_CALLBACK_COMPLETE;
     }
 
     if(result < 0){
         ulfius_set_json_body_response(pResponse, 500, json_pack("{ss}", ERROR, LIGHT_ERR));
+        fprintf(_logFD, "---> LIGHT ERROR: %s\n", LIGHT_ERR);
         return U_CALLBACK_COMPLETE;
     }
 
     ulfius_set_json_body_response(pResponse, 200, json_pack("{ss}", OK, LIGHT_OK));
 
+    fprintf(_logFD, "---> LIGHT TURNED ON/OFF!\n");
+    fflush(_logFD);
     return U_CALLBACK_CONTINUE;
 }
 
@@ -223,6 +254,8 @@ int callback_lights(const struct _u_request *pRequest, struct _u_response *pResp
  */
 int callback_all_doors(const struct _u_request *pRequest, struct _u_response *pResponse, void *pUserData){
 
+    fprintf(_logFD, "---> DOORS REQUEST\n");
+    fflush(_logFD);
     json_t *root = json_object();
 
     json_object_set_new(root, "kitchen", json_integer(digitalRead(DOORS[KITCHEN])));
@@ -248,22 +281,24 @@ int callback_all_doors(const struct _u_request *pRequest, struct _u_response *pR
  */
 int callback_picture(const struct _u_request *pRequest, struct _u_response *pResponse, void *pUserData){
 
+    fprintf(_logFD, "---> PICTURE REQUEST\n");
+    fflush(_logFD);
     char *path = NULL;
 
     int optionNum = (rand()%3) + 1;
 
     switch(optionNum){
         case 1:
-            path = "/home/root/pictures/pic_1.jpg";
+            path = PICTURE_1;
             break;
         case 2:
-            path = "/home/root/pictures/pic_2.jpg";
+            path = PICTURE_2;
             break;
         case 3:
-            path = "/home/root/pictures/pic_3.jpg";
+            path = PICTURE_3;
             break;
         default:
-            path = "/home/root/pictures/pic_1.jpg";
+            path = PICTURE_1;
             break;
     }
 
@@ -272,11 +307,15 @@ int callback_picture(const struct _u_request *pRequest, struct _u_response *pRes
     if(image.status == 0){
         char *base64Encoded = base64(image.buffer, image.size); //Encode image to base64 string
         ulfius_set_json_body_response(pResponse, 200, json_pack("{ss}", "image", base64Encoded));
+        fprintf(_logFD, "---> SENDING PICTURE -> %s\n", path);
     }
 
-    else
+    else{
         ulfius_set_json_body_response(pResponse, 200, json_pack("{ss}", ERROR, PIC_ERR));
+        fprintf(_logFD, "---> PICTURE ERROR: %s\n", PIC_ERR);
+    }
 
+    fflush(_logFD);
     return U_CALLBACK_COMPLETE;
 }
 
@@ -305,12 +344,14 @@ void addEndpoints(struct _u_instance *pServerInstance){
  * Uses the gpio library to export the gpio pins that will be used
  */
 void exportPins(){
+    fprintf(_logFD, "Exporting pins...\n");
+    fflush(_logFD);
 
     //Export output pins
     int lenght = sizeof(LIGHTS) / sizeof(LIGHTS[0]);
     for(int i=0; i< lenght; i++){
         if(pinMode(LIGHTS[i], OUTPUT) < 0) {
-            fprintf(stderr, "Unable to set pin as ouput: %d\n", LIGHTS[i]);
+            fprintf(_logFD, "Unable to set pin as ouput: %d\n", LIGHTS[i]);
         }
     }
 
@@ -318,7 +359,7 @@ void exportPins(){
     lenght = sizeof(DOORS) / sizeof(DOORS[0]);
     for(int i=0; i< lenght; i++){
         if(pinMode(DOORS[i], INPUT) < 0) {
-            fprintf(stderr, "Unable to set pin as input: %d\n", DOORS[i]);
+            fprintf(_logFD, "Unable to set pin as input: %d\n", DOORS[i]);
         }
     }
 }
@@ -327,11 +368,13 @@ void exportPins(){
  * Release the pins exported
  */
 void unexportPins(){
+    fprintf(_logFD, "Releasing pins...\n");
+    fflush(_logFD);
     //Unexport output pins
     int lenght = sizeof(LIGHTS) / sizeof(LIGHTS[0]);
     for(int i=0; i< lenght; i++){
         if(releasePin(LIGHTS[i]) < 0) {
-            fprintf(stderr, "Unable to unexport pin: %d\n", LIGHTS[i]);
+            fprintf(_logFD, "Unable to unexport output pin: %d\n", LIGHTS[i]);
         }
     }
 
@@ -339,12 +382,10 @@ void unexportPins(){
     lenght = sizeof(DOORS) / sizeof(DOORS[0]);
     for(int i=0; i< lenght; i++){
         if(releasePin(DOORS[i]) < 0) {
-            fprintf(stderr, "Unable to unexport pin: %d\n", DOORS[i]);
+            fprintf(_logFD, "Unable to unexport input pin: %d\n", DOORS[i]);
         }
     }
 }
-
-
 
 
 /**
@@ -352,7 +393,7 @@ void unexportPins(){
  * @param pFilePtr File descriptor
  */
 void resetInputFile(FILE *pFilePtr){
-    pFilePtr = fopen("srv_input.txt", "w+");
+    pFilePtr = fopen(INPUT_FILE, "w+");
     fclose(pFilePtr);
 }
 
@@ -360,21 +401,21 @@ void resetInputFile(FILE *pFilePtr){
  * Releases the pins used and stop the server framework
  * @param pLogPtr File descriptor of the Log file
  */
-void shutdownServer(FILE *pLogPtr){
+void shutdownServer(){
     unexportPins();
     ulfius_stop_framework(&_serverInstance);
     ulfius_clean_instance(&_serverInstance);
-    fprintf(pLogPtr, "Shutting down...\n");
-    fclose(pLogPtr);
+    fprintf(_logFD, "Shutting down...\n");
+    fclose(_logFD);
 }
 
 /**
  * main function
  */
 int main(void) {
+
     srand(time(NULL));
     // ------------------------------------- Daemon
-    FILE *logFD= NULL;
     pid_t process_id = 0;
     pid_t sid = 0;
     // Create child process
@@ -391,10 +432,9 @@ int main(void) {
         // return success in exit status
         exit(0);
     }
-    //unmask the file mode
-    umask(0);
-    //set new session
-    sid = setsid();
+
+    umask(0); //unmask the file mode
+    sid = setsid();//set new session
     if(sid < 0) {
         exit(1); // Return failure
     }
@@ -407,8 +447,36 @@ int main(void) {
     close(STDERR_FILENO);
 
     //Open a log file
-    logFD = fopen ("Log_server.txt", "w+");
+    _logFD = fopen (LOG_FILE, "w+");
     // ------------------------------------- Daemon
+
+    //_publicKeyBuffer = loadKey("/home/root/public.pem");
+    _privateKeyBuffer = loadKey(PRIVATE_KEY_FILE);
+
+    // fprintf(_logFD, "KEY: %s\n", _publicKeyBuffer);
+    // fflush(_logFD);
+
+    // encrypted_length= public_encrypt(PASS, strlen(PASS), _publicKeyBuffer, encrypted);
+    // if(encrypted_length == -1)
+    // {
+    //     fprintf(_logFD, "Private Encrypt failed\n");
+    //     fflush(_logFD);
+    // }
+    //
+    //
+    // unsigned char  decrypted[4098]={};
+    //
+    // private_decrypt(encrypted, encrypted_length, _privateKeyBuffer, decrypted);
+    // fprintf(_logFD, "DECRYPTED: %s\n", decrypted);
+    // fflush(_logFD);
+    //
+    // char * base64Encrypt = base64(encrypted, encrypted_length);
+    // fprintf(_logFD, "BASE64 ENCRYPTED: %s\n", base64Encrypt);
+    // fflush(_logFD);
+
+
+    //-------------
+
 
     char cmd[10];
     int len = 0;
@@ -417,8 +485,8 @@ int main(void) {
 
     // Initialize instance with the port number
     if (ulfius_init_instance(&_serverInstance, PORT, NULL, NULL) != U_OK) {
-        fprintf(logFD, "Error initializing the server instance\n");
-        fflush(logFD);
+        fprintf(_logFD, "Error initializing the server instance\n");
+        fflush(_logFD);
         return(1);
     }
 
@@ -432,17 +500,17 @@ int main(void) {
         char out[100];
         char in[100];
 
-        fprintf(logFD, "Framework started on port %d\n", _serverInstance.port);
-        fflush(logFD);
+        fprintf(_logFD, "Framework started on port %d\n", _serverInstance.port);
+        fflush(_logFD);
         resetInputFile(tmpPtr);
 
         while(!_EXIT){
 
             sleep(1);
-            if((inputPtr = fopen("srv_input.txt", "r")) == NULL){
+            if((inputPtr = fopen(INPUT_FILE, "r")) == NULL){
                 //printf("Error opening input file\n");
-                fprintf(logFD, "Error opening input file... Shutting down...\n");
-                fflush(logFD);
+                fprintf(_logFD, "Error opening input file... Shutting down...\n");
+                fflush(_logFD);
                 _EXIT = 1;
             }
             else{
@@ -450,7 +518,7 @@ int main(void) {
                 if(strcmp(in, "exit") == 0){
                     fclose(inputPtr);
                     resetInputFile(tmpPtr);
-                    shutdownServer(logFD);
+                    shutdownServer();
                     _EXIT = 1;
                 }
 
@@ -469,11 +537,11 @@ int main(void) {
     }
 
     else {
-        fprintf(logFD, "Error starting framework\n");
-        fflush(logFD);
-        shutdownServer(logFD);
+        fprintf(_logFD, "Error starting framework\n");
+        fflush(_logFD);
+        shutdownServer();
     }
 
-    fclose(logFD);
+    fclose(_logFD);
     return 0;
 }
