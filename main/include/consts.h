@@ -2,8 +2,20 @@
 #define _CONSTS_H
 
 enum ROOMS {KITCHEN, BEDROOM_1, BEDROOM_2, LIVING, DINING, BATHROOM, MAIN};
-int LIGHTS[] = {24};
-int DOORS[] = {23};
+int LIGHTS[] = {14, 15, 18, 23, 24, 25, 8};
+int DOORS[] = {17, 27, 22, 13, 19, 26, 16};
+//{17, 27, 22, 5, 6, 26, 16};
+int ENCRYPTION_LENGTH = 256;
+
+static const char * USER = "admin";
+static const char * PASS = "embedded2020";
+
+static const char * INPUT_FILE = "srv_input.txt";
+static const char * LOG_FILE = "Log_server.txt";
+static const char * PRIVATE_KEY_FILE = "home/root/private.pem";
+static const char * PICTURE_1 = "/home/root/pictures/pic_1.jpg";
+static const char * PICTURE_2 = "/home/root/pictures/pic_2.jpg";
+static const char * PICTURE_3 = "/home/root/pictures/pic_3.jpg";
 
 static const char * OK = "Ok";
 static const char * VALUE = "Value";
