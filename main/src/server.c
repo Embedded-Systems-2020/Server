@@ -162,20 +162,17 @@ int callback_doors(const struct _u_request *pRequest, struct _u_response *pRespo
         return U_CALLBACK_COMPLETE;
     }
 
-    if(strcmp(location, "kitchen") == 0)
-        value = digitalRead(DOORS[KITCHEN]);
-    else if(strcmp(location, "room1") == 0)
-        value = digitalRead(DOORS[BEDROOM_1]);
+
+    if(strcmp(location, "room1") == 0)
+        value = digitalRead(DOORS[BEDROOM_1_DOOR]);
     else if(strcmp(location, "room2") == 0)
-        value = digitalRead(DOORS[BEDROOM_2]);
-    else if(strcmp(location, "living") == 0)
-        value = digitalRead(DOORS[LIVING]);
-    else if(strcmp(location, "dining") == 0)
-        value = digitalRead(DOORS[DINING]);
+        value = digitalRead(DOORS[BEDROOM_2_DOOR]);
     else if(strcmp(location, "bath") == 0)
-        value = digitalRead(DOORS[BATHROOM]);
+        value = digitalRead(DOORS[BATHROOM_DOOR]);
     else if(strcmp(location, "main") == 0)
-        value = digitalRead(DOORS[MAIN]);
+        value = digitalRead(DOORS[MAIN_DOOR]);
+    else if(strcmp(location, "garage") == 0)
+        value = digitalRead(DOORS[GARAGE_DOOR]);
     else{
         ulfius_set_json_body_response(pResponse, 400, json_pack("{ss}", ERROR, ROOM_ERR));
         return U_CALLBACK_COMPLETE;
@@ -223,8 +220,6 @@ int callback_lights(const struct _u_request *pRequest, struct _u_response *pResp
         result = digitalWrite(LIGHTS[DINING], stateValue);
     else if(strcmp(location, "bath") == 0)
         result = digitalWrite(LIGHTS[BATHROOM], stateValue);
-    else if(strcmp(location, "main") == 0)
-        result = digitalWrite(LIGHTS[MAIN], stateValue);
     else{
         ulfius_set_json_body_response(pResponse, 400, json_pack("{ss}", ERROR, ROOM_ERR));
         fprintf(_logFD, "---> LIGHT ERROR: %s\n", ROOM_ERR);
@@ -258,13 +253,11 @@ int callback_all_doors(const struct _u_request *pRequest, struct _u_response *pR
     fflush(_logFD);
     json_t *root = json_object();
 
-    json_object_set_new(root, "kitchen", json_integer(digitalRead(DOORS[KITCHEN])));
-    json_object_set_new(root, "room1", json_integer(digitalRead(DOORS[BEDROOM_1])));
-    json_object_set_new(root, "room2", json_integer(digitalRead(DOORS[BEDROOM_2])));
-    json_object_set_new(root, "living", json_integer(digitalRead(DOORS[LIVING])));
-    json_object_set_new(root, "dining", json_integer(digitalRead(DOORS[DINING])));
-    json_object_set_new(root, "bathroom", json_integer(digitalRead(DOORS[BATHROOM])));
-    json_object_set_new(root, "main", json_integer(digitalRead(DOORS[MAIN])));
+    json_object_set_new(root, "room1", json_integer(digitalRead(DOORS[BEDROOM_1_DOOR])));
+    json_object_set_new(root, "room2", json_integer(digitalRead(DOORS[BEDROOM_2_DOOR])));
+    json_object_set_new(root, "bathroom", json_integer(digitalRead(DOORS[BATHROOM_DOOR])));
+    json_object_set_new(root, "main", json_integer(digitalRead(DOORS[MAIN_DOOR])));
+    json_object_set_new(root, "garage", json_integer(digitalRead(DOORS[GARAGE_DOOR])));
 
     ulfius_set_json_body_response(pResponse, 200, root);
     return U_CALLBACK_COMPLETE;
